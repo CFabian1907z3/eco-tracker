@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="es" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador de Huella de Carbono v2</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* ================================================================== */
+        /* ESTILOS BASE Y PARA MODO OSCURO */
+        /* ================================================================== */
+        :root {
+            --bg-light: #f0f4f8; --bg-dark: #1a202c;
+            --shell-light: #ffffff; --shell-dark: #2d3748;
+            --text-light: #1a202c; --text-dark: #e2e8f0;
+            --text-muted-light: #4a5568; --text-muted-dark: #a0aec0;
+            --surface-light: #f7fafc; --surface-dark: #4a5568;
+            --border-light: #e2e8f0; --border-dark: #4a5568;
+        }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            transition: background-color 0.3s ease; 
+            background-color: var(--shell-light); /* Fondo blanco por defecto para móvil */
+            color: var(--text-light);
+        }
+        .dark body {
+            background-color: var(--shell-dark);
+            color: var(--text-dark);
+        }
+        
+        /* 1. AJUSTES PARA INTERFAZ MÓVIL (PANTALLA COMPLETA) */
+        #app-container {
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            padding: 0;
+            background-color: var(--shell-light);
+        }
+        .dark #app-container {
+            background-color: var(--shell-dark);
+        }
+        body {
+            padding: 0;
+        }
+        #main-content {
+            flex-grow: 1;
+        }
+        /* Fin del ajuste 1 */
+
+        .text-main { color: var(--text-light); }
+        .text-muted { color: var(--text-muted-light); }
+        #app-header { text-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.12); }
+        #app-header h1 { color: #222; text-shadow: 0 2px 8px rgba(255,255,255,0.18), 0 1px 2px rgba(0,0,0,0.12); }
+        .dark #app-header h1 { color: #e2e8f0; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+        #current-date-display { color: #222; font-weight: 600; margin-top: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+        .dark #current-date-display { color: #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,0.28); }
+        .bg-surface { background-color: var(--surface-light); }
+        .border-default { border-color: var(--border-light); }
+        .dark .text-main { color: var(--text-dark); }
+        .dark .text-muted { color: var(--text-muted-dark); }
+        .dark .bg-surface { background-color: var(--surface-dark); }
+        .dark .bg-white { background-color: #2d3748; }
+        .dark .border-default { border-color: var(--border-dark); }
+        .dark .nav-button.text-gray-500 { color: #a0aec0; }
+        .dark .chart-legend-color { color: #e2e8f0 !important; }
+
+        .bg-green-zone { background-color: #2ecc71; } .bg-orange-zone { background-color: #f39c12; } .bg-red-zone { background-color: #e74c3c; }
+        .text-green-zone { color: #27ae60; } .text-orange-zone { color: #d35400; } .text-red-zone { color: #c0392b; }
+        .dark .text-green-zone, .dark .text-orange-zone, .dark .text-red-zone { color: white; }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .fade-out { animation: fadeOut 0.5s ease-in forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .scale-up { animation: scaleUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        @keyframes scaleUp { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* Estilos de avisos dinámicos */
+        .aq-good { background-color: #d1fae5; border-color: #6ee7b7; } .aq-good h4, .aq-good p { color: #065f46; }
+        .aq-moderate { background-color: #fef9c3; border-color: #fcd34d; } .aq-moderate h4, .aq-moderate p { color: #92400e; }
+        .aq-unhealthy-sensitive { background-color: #ffedd5; border-color: #fdba74; } .aq-unhealthy-sensitive h4, .aq-unhealthy-sensitive p { color: #9a3412; }
+        .aq-unhealthy { background-color: #fee2e2; border-color: #fca5a5; } .aq-unhealthy h4, .aq-unhealthy p { color: #991b1b; }
+        .dark .aq-good { background-color: #064e3b; border-color: #10b981; } .dark .aq-good h4, .dark .aq-good p { color: #a7f3d0; }
+        .dark .aq-moderate { background-color: #4c2c07; border-color: #fbbf24; } .dark .aq-moderate h4, .dark .aq-moderate p { color: #fde68a; }
+        .dark .aq-unhealthy-sensitive { background-color: #7c2d12; border-color: #f97316; } .dark .aq-unhealthy-sensitive h4, .dark .aq-unhealthy-sensitive p { color: #fed7aa; }
+        .dark .aq-unhealthy { background-color: #7f1d1d; border-color: #ef4444; } .dark .aq-unhealthy h4, .dark .aq-unhealthy p { color: #fecaca; }
+        .weather-clear { background-color: #e0f2fe; border-color: #93c5fd; } .weather-clear h4, .weather-clear p { color: #1e40af; }
+        .weather-cloudy { background-color: #f3f4f6; border-color: #d1d5db; } .weather-cloudy h4, .weather-cloudy p { color: #374151; }
+        .weather-rain { background-color: #dbeafe; border-color: #93c5fd; } .weather-rain h4, .weather-rain p { color: #1e40af; }
+        .weather-snow { background-color: #ffffff; border-color: #e5e7eb; } .weather-snow h4, .weather-snow p { color: #374151; }
+        .weather-thunderstorm { background-color: #ede9fe; border-color: #c4b5fd; } .weather-thunderstorm h4, .weather-thunderstorm p { color: #5b21b6; }
+        .dark .weather-clear { background-color: #1e3a8a; border-color: #3b82f6; } .dark .weather-clear h4, .dark .weather-clear p { color: #bfdbfe; }
+        .dark .weather-cloudy { background-color: #374151; border-color: #4b5563; } .dark .weather-cloudy h4, .dark .weather-cloudy p { color: #d1d5db; }
+        .dark .weather-rain { background-color: #1e40af; border-color: #3b82f6; } .dark .weather-rain h4, .dark .weather-rain p { color: #bfdbfe; }
+        .dark .weather-snow { background-color: #4b5563; border-color: #6b7280; } .dark .weather-snow h4, .dark .weather-snow p { color: #f3f4f6; }
+        .dark .weather-thunderstorm { background-color: #5b21b6; border-color: #8b5cf6; } .dark .weather-thunderstorm h4, .dark .weather-thunderstorm p { color: #e9d5ff; }
+
+        /* ================================================================== */
+        /* 2. VISTA DE PREVISUALIZACIÓN PARA ORDENADORES (992px+) */
+        /* ================================================================== */
+        @media (min-width: 992px) {
+            /* Estos estilos solo se aplican cuando la app principal está lista */
+            body.app-ready {
+                background-color: #f0f4f8;
+                background-image: radial-gradient(circle at 1px 1px, #d1d5db 1px, transparent 0);
+                background-size: 25px 25px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                padding: 2rem;
+            }
+            .dark body.app-ready {
+                 background-color: #111827;
+                 background-image: radial-gradient(circle at 1px 1px, #374151 1px, transparent 0);
+            }
+
+            /* El #app-container se convierte en el marco del teléfono */
+            body.app-ready #app-container {
+                max-width: 390px;
+                min-width: 390px;
+                height: 844px;
+                min-height: auto;
+                border: 14px solid #1f2937;
+                border-radius: 50px;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 0, 0, 0.2);
+                overflow: hidden;
+                position: relative;
+            }
+
+            /* Simulación de la muesca (notch) */
+            body.app-ready #app-container::before {
+                content: '';
+                position: absolute;
+                top: 0px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 150px;
+                height: 22px;
+                background: #1f2937;
+                border-radius: 0 0 14px 14px;
+                z-index: 100;
+            }
+            
+            /* El contenido principal ahora tiene scroll interno */
+            body.app-ready #main-content {
+                overflow-y: auto;
+            }
+            body.app-ready #main-content::-webkit-scrollbar { width: 5px; }
+            body.app-ready #main-content::-webkit-scrollbar-track { background: #f1f1f1; }
+            body.app-ready #main-content::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
+            .dark body.app-ready #main-content::-webkit-scrollbar-track { background: #2d3748; }
+            .dark body.app-ready #main-content::-webkit-scrollbar-thumb { background: #718096; }
+
+            /* Ajuste de elementos fijos para que queden dentro del marco */
+            body.app-ready #achievement-modal,
+            body.app-ready #toast-notification {
+                position: absolute;
+            }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-0 sm:p-4">
+
+    <div id="loading-screen" class="fixed inset-0 bg-white dark:bg-gray-900 flex flex-col justify-center items-center z-50">
+        <svg class="w-16 h-16 text-green-500 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <p class="mt-4 text-lg text-gray-600 dark:text-gray-300">Cargando un futuro más verde...</p>
+    </div>
+
+    <div id="welcome-screen" class="fixed inset-0 bg-white dark:bg-gray-900 flex-col justify-center items-center z-40 p-8 text-center hidden">
+        <h1 class="text-4xl font-extrabold text-gray-800 dark:text-white mb-4 scale-up">Bienvenido/a</h1>
+        <p class="text-lg text-gray-600 dark:text-gray-300 mb-8 scale-up" style="animation-delay: 0.2s;">Mide tu impacto ambiental y conviértete en un defensor del planeta.</p>
+        <button id="welcome-continue-btn" class="bg-green-500 text-white font-bold py-3 px-8 rounded-full hover:bg-green-600 transition-colors scale-up" style="animation-delay: 0.4s;">Comenzar</button>
+    </div>
+
+    <div id="app-container" class="hidden">
+        <header id="app-header" class="p-4 text-white text-center transition-colors duration-500">
+            <div class="flex justify-between items-center mb-1">
+                <h1 class="text-xl font-bold">Huella de Carbono</h1>
+                <button id="dark-mode-toggle" class="p-2 rounded-full"><svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg><svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg></button>
+            </div>
+            <p id="current-date-display" class="text-sm opacity-90"></p>
+        </header>
+
+        <main id="main-content" class="p-4">
+            <div id="daily-view">
+                <div class="text-center mb-6">
+                    <p class="text-muted">Tu huella de hoy:</p>
+                    <h2 id="daily-total" class="text-5xl font-extrabold transition-colors duration-500 text-main">0.0 kg</h2>
+                    <p class="text-muted">de CO₂</p>
+                </div>
+                
+                <div id="air-quality-container" class="mt-6 p-4 rounded-lg hidden mb-4">
+                    <h4 class="font-bold flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M18 10h-1.26A8 8 0 103.5 18.5H18a4 4 0 100-8zM18 18h-1.5a.5.5 0 01-.5-.5v-1a.5.5 0 01.5-.5H18a.5.5 0 01.5.5v1a.5.5 0 01-.5.5z"/></svg>Calidad del Aire</h4>
+                    <p id="air-quality-info" class="text-sm mt-1"></p><p id="air-quality-suggestion" class="text-sm mt-1 font-semibold"></p>
+                </div>
+
+                <div id="weather-container" class="mt-4 p-4 rounded-lg hidden mb-4">
+                    <h4 class="font-bold flex items-center gap-2"><span id="weather-icon" class="text-xl"></span>Clima Actual</h4>
+                    <p id="weather-info" class="text-sm mt-1"></p><p id="weather-suggestion" class="text-sm mt-1 font-semibold"></p>
+                </div>
+
+                <div id="activities-container"></div>
+                <div id="tip-container" class="mt-6 p-4 rounded-lg bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 hidden">
+                    <h4 class="font-bold text-blue-800 dark:text-blue-200">💡 Consejo del Día</h4>
+                    <p id="tip-text" class="text-sm text-blue-700 dark:text-blue-300 mt-1"></p>
+                </div>
+            </div>
+            <div id="weekly-view" class="hidden"><h3 class="text-2xl font-bold text-main mb-4">Resumen Semanal</h3><div class="bg-white p-4 rounded-xl shadow-sm"><canvas id="weekly-chart"></canvas></div><div class="mt-4 text-center"><p class="text-muted">Total de la semana:</p><p id="weekly-total" class="text-3xl font-bold text-main">0.0 kg CO₂</p></div></div>
+            <div id="stats-view" class="hidden"><h3 class="text-2xl font-bold text-main mb-4">Mis Estadísticas</h3><div class="space-y-4"><div class="grid grid-cols-2 gap-4"><div class="bg-surface p-3 rounded-lg text-center"><p class="text-xs text-muted">Promedio Diario</p><p id="stats-avg-daily" class="font-bold text-lg text-main">0 kg</p></div><div class="bg-surface p-3 rounded-lg text-center"><p class="text-xs text-muted">Total Anual</p><p id="stats-total-annual" class="font-bold text-lg text-main">0 kg</p></div></div><div class="grid grid-cols-2 gap-4"><div class="bg-surface p-3 rounded-lg text-center"><p class="text-xs text-muted">Mejor Mes</p><p id="stats-best-month" class="font-bold text-lg text-green-500">-</p></div><div class="bg-surface p-3 rounded-lg text-center"><p class="text-xs text-muted">Peor Mes</p><p id="stats-worst-month" class="font-bold text-lg text-red-500">-</p></div></div><div class="bg-surface p-3 rounded-lg text-center"><p class="text-xs text-muted">Categoría Principal</p><p id="stats-top-category" class="font-bold text-lg text-main">-</p></div><div class="bg-white p-4 rounded-xl shadow-sm mt-4"><canvas id="stats-chart"></canvas></div></div></div>
+            <div id="achievements-view" class="hidden"><h3 class="text-2xl font-bold text-main mb-4">Mis Retos y Logros</h3><div id="streaks-container" class="space-y-4 mb-6"></div><div><h4 class="font-semibold text-main">Insignias Ganadas</h4><div id="badges-container" class="grid grid-cols-3 gap-4 mt-2 text-center"></div></div></div>
+        </main>
+
+        <nav class="flex justify-around items-center p-2 border-t border-default bg-gray-50 dark:bg-gray-800">
+            <button data-view="daily-view" class="nav-button p-2 rounded-lg text-blue-600 bg-blue-100 dark:bg-blue-800 dark:text-white"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg><span class="text-xs">Hoy</span></button>
+            <button data-view="weekly-view" class="nav-button p-2 rounded-lg text-gray-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg><span class="text-xs">Semana</span></button>
+            <button data-view="stats-view" class="nav-button p-2 rounded-lg text-gray-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg><span class="text-xs">Stats</span></button>
+            <button data-view="achievements-view" class="nav-button p-2 rounded-lg text-gray-500"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-12v4m-2-2h4m5 4v4m-2-2h4M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5z" /></svg><span class="text-xs">Logros</span></button>
+        </nav>
+    </div>
+    
+    <div id="achievement-modal" class="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center hidden z-30 p-4"><div class="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl text-center max-w-sm mx-4 scale-up"><h2 id="modal-badge" class="text-6xl mb-4"></h2><h3 id="modal-title" class="text-2xl font-bold text-main mb-2"></h3><p id="modal-text" class="text-muted mb-6"></p><button id="modal-close-button" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-full hover:bg-blue-700 transition-colors">¡Genial!</button></div></div>
+    <div id="toast-notification" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 text-white py-2 px-5 rounded-full text-sm shadow-lg opacity-0 transition-all duration-300 pointer-events-none"></div>
+
+<script>
+const app = {
+    data: {
+        activities: {
+            transporte: {
+                title: "Transporte",
+                icon: '🚗',
+                items: [
+                    { id: 'caminar', name: 'Caminar', value: 0.0, type: 'green' },
+                    { id: 'bicicleta', name: 'Bicicleta', value: 0.0, type: 'green' },
+                    { id: 'bus', name: 'Bus (10km)', value: 0.8, type: 'transport' },
+                    { id: 'mototaxi', name: 'Mototaxi (5km)', value: 0.5, type: 'transport' },
+                    { id: 'car', name: 'Auto (10km)', value: 2.1, type: 'transport' }
+                ]
+            },
+            energia: {
+                title: "Energía en Casa",
+                icon: '�',
+                items: [
+                    { id: 'luz', name: 'Luces (4h)', value: 0.3 },
+                    { id: 'tv', name: 'TV/Consola (2h)', value: 0.4 },
+                    { id: 'ventilador', name: 'Ventilador (4h)', value: 0.6 },
+                    { id: 'ac', name: 'Aire Acond. (1h)', value: 1.5 }
+                ]
+            },
+            alimentacion: {
+                title: "Alimentación",
+                icon: '🍔',
+                items: [
+                    { id: 'local', name: 'Productos Locales', value: 0.2, type: 'green' },
+                    { id: 'vegetariano', name: 'Comida Vegetariana', value: 0.7, type: 'meatless' },
+                    { id: 'pollo', name: 'Pollo / Pescado', value: 1.8, type: 'meat' },
+                    { id: 'carne_roja', name: 'Carne Roja', value: 6.5, type: 'meat' }
+                ]
+            },
+            consumo: {
+                title: "Consumo",
+                icon: '🛍️',
+                items: [
+                    { id: 'reparar', name: 'Reparar un objeto', value: 0.1, type: 'green' },
+                    { id: 'segunda_mano', name: 'Comprar 2da mano', value: 0.3, type: 'green' },
+                    { id: 'ropa_nueva', name: 'Comprar ropa nueva', value: 5.0 },
+                    { id: 'electronica', name: 'Comprar electrónica', value: 15.0 }
+                ]
+            }
+        },
+        achievements: {
+            'first_green': { badge: '🌱', title: 'Primer Día Verde', text: '¡Lograste tu primer día con huella baja! Este es el comienzo.' },
+            'sin_humo': { badge: '🚲', title: 'Sin Humo', text: '¡5 días seguidos sin usar transporte a motor! ¡Tus pulmones y el planeta te lo agradecen!' },
+            'vegetariano_ninja': { badge: '🥗', title: 'Ninja Vegetariano', text: '¡3 días seguidos sin comer carne! Una gran ayuda para el planeta.' },
+            '3_day_streak': { badge: '🥉', title: 'Racha de Bronce', text: 'Mantuviste una huella baja por 3 días seguidos.' },
+            '7_day_streak': { badge: '🥈', title: 'Reto Semanal', text: '¡7 días de huella baja! Eres un campeón del clima.' },
+            'ecoadicto': { badge: '🏆', title: 'Ecoadicto', text: '¡30 días seguidos registrando tus hábitos! Tu compromiso es inspirador.' }
+        },
+        tips: {
+            transporte: "Intenta usar la bicicleta o caminar para distancias cortas. ¡Cada paso cuenta!",
+            energia: "Apaga las luces y desconecta aparatos que no uses. ¡Son vampiros de energía!",
+            alimentacion: "Reducir el consumo de carne roja una vez a la semana hace una gran diferencia.",
+            consumo: "Antes de comprar algo nuevo, piensa si puedes repararlo o conseguirlo de segunda mano.",
+            general: "¡Buen trabajo! Sigue así y comparte tus logros para inspirar a otros."
+        },
+        weatherCodes: { 0: "Cielo despejado", 1: "Mayormente despejado", 2: "Parcialmente nublado", 3: "Nublado", 45: "Niebla", 48: "Niebla escarchada", 51: "Llovizna ligera", 53: "Llovizna moderada", 55: "Llovizna densa", 56: "Llovizna helada ligera", 57: "Llovizna helada densa", 61: "Lluvia ligera", 63: "Lluvia moderada", 65: "Lluvia fuerte", 66: "Lluvia helada ligera", 67: "Lluvia helada fuerte", 71: "Nevada ligera", 73: "Nevada moderada", 75: "Nevada fuerte", 77: "Granos de nieve", 80: "Chubascos ligeros", 81: "Chubascos moderados", 82: "Chubascos violentos", 85: "Chubascos de nieve ligeros", 86: "Chubascos de nieve fuertes", 95: "Tormenta", 96: "Tormenta con granizo ligero", 99: "Tormenta con granizo fuerte" }
+    },
+    state: {
+        currentDate: new Date().toISOString().split('T')[0],
+        allData: {},
+        achievementsUnlocked: new Set(),
+        streaks: { greenDays: 0, noMotorTransport: 0, meatlessDays: 0, consecutiveLogins: 0 },
+        theme: 'light',
+        weeklyChart: null,
+        statsChart: null,
+        lastLoginDate: null,
+        airVisualApiKey: '8104a9b6-d1dc-46b4-8d7c-d9553d4840b6',
+        meteoblueApiKey: 'fEdDgLatFVK4302z'
+    },
+    thresholds: { green: 5.0, orange: 10.0 },
+
+    init() {
+        this.loadState();
+        this.ui.updateTheme(this.state.theme);
+        this.ui.setupEventListeners();
+
+        const loadingScreen = document.getElementById('loading-screen');
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const appContainer = document.getElementById('app-container');
+
+        setTimeout(() => {
+            loadingScreen.classList.add('fade-out');
+            const hasSeenWelcome = localStorage.getItem('hasSeenWelcome');
+
+            if (!hasSeenWelcome) {
+                welcomeScreen.classList.remove('hidden');
+                welcomeScreen.classList.add('flex', 'fade-in');
+            } else {
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('fade-in');
+                this.startApp();
+            }
+
+            setTimeout(() => loadingScreen.classList.add('hidden'), 500);
+        }, 1500);
+    },
+
+    startApp() {
+        // AÑADIDO: Agregar clase al body cuando la app está lista
+        document.body.classList.add('app-ready');
+        
+        this.logic.checkNewDay();
+        this.ui.renderAll();
+        this.logic.getGeolocation();
+        console.log("👍 Aplicación v2 iniciada.");
+    },
+
+    loadState() {
+        const saved = JSON.parse(localStorage.getItem('carbonTrackerState_v2'));
+        if (saved) {
+            this.state.allData = saved.allData || {}; 
+            for (const date in this.state.allData) {
+                if (this.state.allData[date].activities && Array.isArray(this.state.allData[date].activities)) {
+                    this.state.allData[date].activities = new Set(this.state.allData[date].activities);
+                } else {
+                    this.state.allData[date].activities = new Set();
+                }
+            }
+            this.state.achievementsUnlocked = new Set(saved.achievementsUnlocked || []);
+            this.state.streaks = { ...this.state.streaks, ...saved.streaks };
+            this.state.theme = saved.theme || 'light';
+            this.state.lastLoginDate = saved.lastLoginDate || null;
+        }
+    },
+
+    saveState() {
+        const dataToSave = {};
+        for (const date in this.state.allData) {
+            const dayData = { ...this.state.allData[date] };
+            if (dayData.activities instanceof Set) {
+                dayData.activities = Array.from(dayData.activities);
+            }
+            dataToSave[date] = dayData;
+        }
+        const stateToSave = {
+            allData: dataToSave,
+            achievementsUnlocked: Array.from(this.state.achievementsUnlocked),
+            streaks: this.state.streaks,
+            theme: this.state.theme,
+            lastLoginDate: this.state.currentDate
+        };
+        localStorage.setItem('carbonTrackerState_v2', JSON.stringify(stateToSave));
+        console.log("💾 Estado guardado.");
+    },
+    
+    ui: {
+        setupEventListeners() {
+            document.getElementById('welcome-continue-btn').addEventListener('click', () => {
+                const welcomeScreen = document.getElementById('welcome-screen');
+                const appContainer = document.getElementById('app-container');
+                welcomeScreen.classList.add('fade-out');
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('fade-in');
+                setTimeout(() => welcomeScreen.classList.add('hidden'), 500);
+                localStorage.setItem('hasSeenWelcome', 'true');
+                app.startApp();
+            });
+            document.getElementById('dark-mode-toggle').addEventListener('click', () => {
+                const newTheme = app.state.theme === 'light' ? 'dark' : 'light';
+                this.updateTheme(newTheme);
+            });
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.addEventListener('click', () => this.handleNav(button.dataset.view));
+            });
+            document.getElementById('main-content').addEventListener('click', (e) => {
+                const button = e.target.closest('.activity-item');
+                if (button) {
+                    app.logic.toggleActivity(button.dataset.id);
+                }
+            });
+            document.getElementById('modal-close-button').addEventListener('click', () => {
+                document.getElementById('achievement-modal').classList.add('hidden');
+            });
+        },
+        renderAll() {
+            this.updateDateDisplay();
+            this.renderDailyView();
+            app.logic.calculateDailyTotal();
+            this.updateDailyTotalDisplay();
+            this.updateHeaderColor();
+            this.updateActivityButtons();
+            this.updateTip();
+            this.renderAchievementsView();
+            this.renderAirQuality();
+            this.renderWeather();
+        },
+        handleNav(viewId) {
+            ['daily-view', 'weekly-view', 'stats-view', 'achievements-view'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                const isSelected = btn.dataset.view === viewId;
+                btn.classList.toggle('text-blue-600', isSelected);
+                btn.classList.toggle('bg-blue-100', isSelected);
+                btn.classList.toggle('dark:bg-blue-800', isSelected);
+                btn.classList.toggle('dark:text-white', isSelected);
+                btn.classList.toggle('text-gray-500', !isSelected);
+            });
+            if (viewId === 'weekly-view') this.renderWeeklyChart();
+            if (viewId === 'stats-view') this.renderStatsView();
+        },
+        updateTheme(theme) {
+            app.state.theme = theme;
+            const sunIcon = document.getElementById('theme-icon-sun');
+            const moonIcon = document.getElementById('theme-icon-moon');
+            if (theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+            } else {
+                document.documentElement.classList.remove('dark');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+            }
+            app.saveState();
+            if (app.state.weeklyChart) this.renderWeeklyChart();
+            if (app.state.statsChart) this.renderStatsView();
+        },
+        updateDateDisplay() {
+            const dateElement = document.getElementById('current-date-display');
+            const today = new Date();
+            const options = { weekday: 'long', day: 'numeric', month: 'long' };
+            let formattedDate = today.toLocaleDateString('es-ES', options);
+            dateElement.textContent = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+        },
+        renderDailyView() {
+            const container = document.getElementById('activities-container');
+            container.innerHTML = '';
+            for (const categoryKey in app.data.activities) {
+                const category = app.data.activities[categoryKey];
+                const itemsHTML = category.items.map(item => `<button data-id="${item.id}" class="activity-item w-full text-left flex items-center p-3 mb-2 rounded-lg border border-default bg-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"><div class="flex-grow flex items-center"><span class="font-semibold text-main">${item.name}</span></div><span class="text-sm font-bold text-muted">+${item.value.toFixed(1)} kg</span><div class="w-6 h-6 ml-3 border-2 border-gray-300 dark:border-gray-500 rounded-full flex items-center justify-center"></div></button>`).join('');
+                container.innerHTML += `<h3 class="text-lg font-bold text-main flex items-center gap-2 mb-3">${category.icon} ${category.title}</h3>${itemsHTML}`;
+            }
+        },
+        updateDailyTotalDisplay() {
+            const todayData = app.state.allData[app.state.currentDate] || { total: 0 };
+            document.getElementById('daily-total').textContent = `${todayData.total.toFixed(1)} kg`;
+        },
+        updateHeaderColor() {
+            const total = (app.state.allData[app.state.currentDate] || { total: 0 }).total;
+            const header = document.getElementById('app-header');
+            header.classList.remove('bg-green-zone', 'bg-orange-zone', 'bg-red-zone');
+            if (total === 0) { /* No color */ }
+            else if (total <= app.thresholds.green) header.classList.add('bg-green-zone');
+            else if (total <= app.thresholds.orange) header.classList.add('bg-orange-zone');
+            else header.classList.add('bg-red-zone');
+        },
+        updateActivityButtons() {
+            const todayActivities = (app.state.allData[app.state.currentDate] && app.state.allData[app.state.currentDate].activities instanceof Set) 
+                                    ? app.state.allData[app.state.currentDate].activities 
+                                    : new Set();
+            document.querySelectorAll('.activity-item').forEach(button => {
+                const id = button.dataset.id;
+                const checkmarkDiv = button.querySelector('.w-6.h-6');
+                const isSelected = todayActivities.has(id);
+                button.classList.toggle('border-blue-500', isSelected);
+                button.classList.toggle('bg-blue-50', isSelected);
+                button.classList.toggle('dark:bg-blue-900', isSelected);
+                checkmarkDiv.innerHTML = isSelected ? `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>` : '';
+            });
+        },
+        updateTip() {
+            const tipContainer = document.getElementById('tip-container');
+            const tipText = document.getElementById('tip-text');
+            const todayData = app.state.allData[app.state.currentDate];
+            if (!todayData || todayData.total === 0) {
+                tipContainer.classList.add('hidden');
+                return;
+            }
+            let maxCategory = 'general';
+            let maxVal = 0;
+            for (const cat in todayData.categories) {
+                if (todayData.categories[cat] > maxVal) {
+                    maxVal = todayData.categories[cat]; 
+                    maxCategory = cat;
+                }
+            }
+            tipText.textContent = app.data.tips[maxCategory];
+            tipContainer.classList.remove('hidden');
+        },
+        renderAirQuality(data = app.state.airQualityData) {
+            const container = document.getElementById('air-quality-container');
+            if (!container) return;
+            const infoText = document.getElementById('air-quality-info');
+            const suggestionText = document.getElementById('air-quality-suggestion');
+            const titleElement = container.querySelector('h4');
+            container.className = 'mt-6 p-4 rounded-lg mb-4';
+            titleElement.className = 'font-bold flex items-center gap-2';
+            infoText.className = 'text-sm mt-1';
+            suggestionText.className = 'text-sm mt-1 font-semibold';
+            if (!data) { container.classList.add('hidden'); return; }
+            const { aqi, mainPollutant, city } = data;
+            let aqiColorClass = '', aqiDescription = '', suggestion = '', containerClass = '';
+            if (aqi <= 50) { aqiDescription = 'Buena'; suggestion = '¡Excelente calidad del aire! Ideal para actividades al aire libre.'; containerClass = 'aq-good'; } 
+            else if (aqi <= 100) { aqiDescription = 'Moderada'; suggestion = 'Calidad del aire aceptable. Considera actividades al aire libre.'; containerClass = 'aq-moderate'; } 
+            else if (aqi <= 150) { aqiDescription = 'Dañina para grupos sensibles'; suggestion = 'Opta por transporte público o comparte coche.'; containerClass = 'aq-unhealthy-sensitive'; } 
+            else { aqiDescription = 'Poco saludable'; suggestion = '¡Cuidado! Evita el transporte motorizado si es posible.'; containerClass = 'aq-unhealthy'; }
+            container.classList.add(containerClass);
+            infoText.innerHTML = `AQI: <span class="font-bold">${aqi} (${aqiDescription})</span> en ${city}. Principal: <span class="font-bold">${mainPollutant.toUpperCase()}</span>.`;
+            suggestionText.textContent = suggestion;
+            container.classList.remove('hidden');
+        },
+        renderWeather(data = app.state.weatherData) {
+            const container = document.getElementById('weather-container');
+            if (!container) return;
+            const infoText = document.getElementById('weather-info');
+            const suggestionText = document.getElementById('weather-suggestion');
+            const weatherIconElement = document.getElementById('weather-icon');
+            const titleElement = container.querySelector('h4');
+            container.className = 'mt-4 p-4 rounded-lg mb-4';
+            titleElement.className = 'font-bold flex items-center gap-2';
+            infoText.className = 'text-sm mt-1';
+            suggestionText.className = 'text-sm mt-1 font-semibold';
+            if (!data) { container.classList.add('hidden'); return; }
+            const { temperature, weatherCode } = data;
+            const weatherDescription = app.data.weatherCodes[weatherCode] || 'Desconocido';
+            let suggestion = '', weatherEmoji = '', containerClass = '';
+            if (weatherCode <= 3) { weatherEmoji = '☀️'; containerClass = 'weather-clear'; suggestion = '¡Día perfecto para caminar o ir en bicicleta!'; } 
+            else if (weatherCode <= 48) { weatherEmoji = '🌫️'; containerClass = 'weather-cloudy'; suggestion = 'Con niebla, considera el transporte público.'; } 
+            else if (weatherCode <= 67) { weatherEmoji = '🌧️'; containerClass = 'weather-rain'; suggestion = 'El clima no acompaña, usa transporte público.'; } 
+            else if (weatherCode <= 77) { weatherEmoji = '❄️'; containerClass = 'weather-snow'; suggestion = '¡Nieve! El transporte público es tu mejor aliado.'; } 
+            else if (weatherCode <= 82) { weatherEmoji = '🌦️'; containerClass = 'weather-rain'; suggestion = 'Chubascos intermitentes, lleva paraguas.'; } 
+            else if (weatherCode >= 95) { weatherEmoji = '⛈️'; containerClass = 'weather-thunderstorm'; suggestion = '¡Tormenta! Es mejor quedarse en casa.'; } 
+            else { weatherEmoji = '☁️'; containerClass = 'weather-cloudy'; suggestion = 'Buen clima para transporte sostenible.'; }
+            container.classList.add(containerClass);
+            weatherIconElement.textContent = weatherEmoji;
+            infoText.innerHTML = `${temperature}°C, ${weatherDescription}.`;
+            suggestionText.textContent = suggestion;
+            container.classList.remove('hidden');
+        },
+        renderWeeklyChart() {
+            const ctx = document.getElementById('weekly-chart').getContext('2d');
+            const labels = []; const data = []; let weeklyTotal = 0;
+            const today = new Date();
+            for (let i = 6; i >= 0; i--) {
+                const day = new Date(today);
+                day.setDate(today.getDate() - i);
+                const dateString = day.toISOString().split('T')[0];
+                labels.push(day.toLocaleDateString('es-ES', { weekday: 'short' }));
+                const dayTotal = (app.state.allData[dateString] || { total: 0 }).total;
+                data.push(dayTotal);
+                weeklyTotal += dayTotal;
+            }
+            document.getElementById('weekly-total').textContent = `${weeklyTotal.toFixed(1)} kg CO₂`;
+            if (app.state.weeklyChart) app.state.weeklyChart.destroy();
+            app.state.weeklyChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: 'kg de CO₂', data, backgroundColor: data.map(val => val <= app.thresholds.green ? '#2ecc71' : val <= app.thresholds.orange ? '#f39c12' : '#e74c3c'), borderRadius: 5 }] },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: app.state.theme === 'dark' ? 'white' : 'black' } }, x: { ticks: { color: app.state.theme === 'dark' ? 'white' : 'black' } } } }
+            });
+        },
+        renderStatsView() {
+            const stats = app.logic.getStats();
+            document.getElementById('stats-avg-daily').textContent = `${stats.avgDaily.toFixed(1)} kg`;
+            document.getElementById('stats-total-annual').textContent = `${stats.totalAnnual.toFixed(0)} kg`;
+            document.getElementById('stats-best-month').textContent = stats.bestMonth || '-';
+            document.getElementById('stats-worst-month').textContent = stats.worstMonth || '-';
+            document.getElementById('stats-top-category').textContent = stats.topCategory || '-';
+            this.renderStatsChart(stats.monthlyTotals);
+        },
+        renderStatsChart(monthlyTotals) {
+            const ctx = document.getElementById('stats-chart').getContext('2d');
+            const labels = []; const data = [];
+            const today = new Date();
+            for (let i = 11; i >= 0; i--) {
+                const month = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                labels.push(month.toLocaleDateString('es-ES', { month: 'short' }));
+                const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+                const monthData = monthlyTotals[monthKey];
+                data.push(monthData ? monthData.total / monthData.days : 0);
+            }
+            if (app.state.statsChart) app.state.statsChart.destroy();
+            app.state.statsChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets: [{ label: 'Promedio Diario Mensual (kg CO₂)', data, fill: false, borderColor: '#3b82f6', tension: 0.1 }] },
+                options: { responsive: true, plugins: { legend: { labels: { color: app.state.theme === 'dark' ? 'white' : 'black' } } }, scales: { y: { beginAtZero: true, ticks: { color: app.state.theme === 'dark' ? 'white' : 'black' } }, x: { ticks: { color: app.state.theme === 'dark' ? 'white' : 'black' } } } }
+            });
+        },
+        renderAchievementsView() {
+            const streaksContainer = document.getElementById('streaks-container');
+            const badgesContainer = document.getElementById('badges-container');
+            const streaks = app.state.streaks;
+            streaksContainer.innerHTML = `<div class="bg-surface p-3 rounded-lg"><p class="font-semibold text-main">Racha Días Verdes: ${streaks.greenDays} 🌱</p></div><div class="bg-surface p-3 rounded-lg"><p class="font-semibold text-main">Días sin Motor: ${streaks.noMotorTransport} 🚲</p></div><div class="bg-surface p-3 rounded-lg"><p class="font-semibold text-main">Días sin Carne: ${streaks.meatlessDays} 🥗</p></div><div class="bg-surface p-3 rounded-lg"><p class="font-semibold text-main">Registros Seguidos: ${streaks.consecutiveLogins} 🏆</p></div>`;
+            badgesContainer.innerHTML = '';
+            for (const id in app.data.achievements) {
+                const achievement = app.data.achievements[id];
+                const isUnlocked = app.state.achievementsUnlocked.has(id);
+                badgesContainer.innerHTML += `<div class="p-4 rounded-lg ${isUnlocked ? 'bg-amber-100 dark:bg-amber-800' : 'bg-gray-100 dark:bg-gray-700'}"><div class="text-4xl ${isUnlocked ? '' : 'opacity-30'}">${achievement.badge}</div><p class="text-xs font-semibold mt-2 ${isUnlocked ? 'text-amber-800 dark:text-amber-200' : 'text-gray-500 dark:text-gray-400'}">${achievement.title}</p></div>`;
+            }
+        },
+        showAchievementModal(id) {
+            const achievement = app.data.achievements[id];
+            const modal = document.getElementById('achievement-modal');
+            document.getElementById('modal-badge').textContent = achievement.badge;
+            document.getElementById('modal-title').textContent = achievement.title;
+            document.getElementById('modal-text').textContent = achievement.text;
+            modal.classList.remove('hidden');
+        },
+        showToast(message, duration = 3000) {
+            const toast = document.getElementById('toast-notification');
+            toast.textContent = message;
+            toast.classList.add('opacity-100', 'pointer-events-auto');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'pointer-events-auto');
+            }, duration);
+        }
+    },
+    
+    logic: {
+        toggleActivity(id) {
+            const date = app.state.currentDate;
+            if (!app.state.allData[date]) {
+                app.state.allData[date] = { total: 0, activities: new Set(), categories: {} };
+            }
+            if (!(app.state.allData[date].activities instanceof Set)) {
+                app.state.allData[date].activities = new Set(app.state.allData[date].activities);
+            }
+            const todayActivities = app.state.allData[date].activities;
+            if (todayActivities.has(id)) todayActivities.delete(id);
+            else todayActivities.add(id);
+            app.ui.renderAll();
+        },
+        calculateDailyTotal() {
+            const date = app.state.currentDate;
+            if (!app.state.allData[date]) return;
+            let total = 0;
+            const categories = { transporte: 0, energia: 0, alimentacion: 0, consumo: 0 };
+            const todayActivities = (app.state.allData[date].activities instanceof Set) 
+                                    ? app.state.allData[date].activities 
+                                    : new Set();
+            todayActivities.forEach(activityId => {
+                for (const categoryKey in app.data.activities) {
+                    const item = app.data.activities[categoryKey].items.find(i => i.id === activityId);
+                    if (item) {
+                        total += item.value;
+                        categories[categoryKey] += item.value;
+                        break;
+                    }
+                }
+            });
+            app.state.allData[date].total = total;
+            app.state.allData[date].categories = categories;
+            app.saveState();
+        },
+        checkNewDay() {
+            const lastLoginDate = app.state.lastLoginDate;
+            const today = new Date(app.state.currentDate);
+            if (!lastLoginDate) {
+                app.state.streaks.consecutiveLogins = 1;
+                app.saveState();
+                return;
+            }
+            const lastLogin = new Date(lastLoginDate);
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+            if (lastLogin.toDateString() === today.toDateString()) { return; }
+            if (lastLogin.toDateString() === yesterday.toDateString()) {
+                app.state.streaks.consecutiveLogins++;
+                const yesterdayData = app.state.allData[lastLoginDate];
+                if (yesterdayData) {
+                    if (yesterdayData.total <= app.thresholds.green) app.state.streaks.greenDays++; else app.state.streaks.greenDays = 0;
+                    const yesterdayActivities = (yesterdayData.activities instanceof Set) ? yesterdayData.activities : new Set(yesterdayData.activities);
+                    const hasMotorTransport = app.data.activities.transporte.items.some(item => item.type === 'transport' && yesterdayActivities.has(item.id));
+                    if (!hasMotorTransport) app.state.streaks.noMotorTransport++; else app.state.streaks.noMotorTransport = 0;
+                    const hasMeat = app.data.activities.alimentacion.items.some(item => item.type === 'meat' && yesterdayActivities.has(item.id));
+                    if (!hasMeat) app.state.streaks.meatlessDays++; else app.state.streaks.meatlessDays = 0;
+                }
+            } else {
+                app.state.streaks = { greenDays: 0, noMotorTransport: 0, meatlessDays: 0, consecutiveLogins: 1 };
+            }
+            this.checkForAchievements();
+            app.saveState();
+        },
+        checkForAchievements() {
+            const { streaks, achievementsUnlocked, allData, currentDate } = app.state;
+            const todayData = allData[currentDate];
+            if (todayData && todayData.total > 0 && todayData.total <= app.thresholds.green && !achievementsUnlocked.has('first_green')) { this.unlockAchievement('first_green'); }
+            if (streaks.greenDays >= 3 && !achievementsUnlocked.has('3_day_streak')) { this.unlockAchievement('3_day_streak'); }
+            if (streaks.greenDays >= 7 && !achievementsUnlocked.has('7_day_streak')) { this.unlockAchievement('7_day_streak'); }
+            if (streaks.noMotorTransport >= 5 && !achievementsUnlocked.has('sin_humo')) { this.unlockAchievement('sin_humo'); }
+            if (streaks.meatlessDays >= 3 && !achievementsUnlocked.has('vegetariano_ninja')) { this.unlockAchievement('vegetariano_ninja'); }
+            if (streaks.consecutiveLogins >= 30 && !achievementsUnlocked.has('ecoadicto')) { this.unlockAchievement('ecoadicto'); }
+        },
+        unlockAchievement(id) {
+            if (app.state.achievementsUnlocked.has(id)) return;
+            app.state.achievementsUnlocked.add(id);
+            app.saveState();
+            app.ui.showAchievementModal(id);
+            console.log(`🏆 Logro desbloqueado: ${app.data.achievements[id].title}`);
+        },
+        getStats() {
+            const { allData } = app.state;
+            const totalDays = Object.keys(allData).length;
+            if (totalDays === 0) return { avgDaily: 0, totalAnnual: 0, bestMonth: '-', worstMonth: '-', topCategory: '-', monthlyTotals: {} };
+            let totalAnnual = 0;
+            const categoryTotals = { transporte: 0, energia: 0, alimentacion: 0, consumo: 0 };
+            const monthlyTotals = {};
+            for (const date in allData) {
+                const dayData = allData[date];
+                totalAnnual += dayData.total;
+                for (const cat in dayData.categories) { categoryTotals[cat] += dayData.categories[cat]; }
+                const monthKey = date.substring(0, 7);
+                if (!monthlyTotals[monthKey]) monthlyTotals[monthKey] = { total: 0, days: 0 };
+                monthlyTotals[monthKey].total += dayData.total;
+                monthlyTotals[monthKey].days++;
+            }
+            const avgDaily = totalAnnual / totalDays;
+            let bestMonth = null, worstMonth = null;
+            let bestAvg = Infinity, worstAvg = -1;
+            const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+            for (const monthKey in monthlyTotals) {
+                const monthData = monthlyTotals[monthKey];
+                const monthAvg = monthData.total / monthData.days;
+                const monthName = monthNames[parseInt(monthKey.split('-')[1]) - 1];
+                if (monthAvg < bestAvg) { bestAvg = monthAvg; bestMonth = monthName; }
+                if (monthAvg > worstAvg) { worstAvg = monthAvg; worstMonth = monthName; }
+            }
+            const topCategory = Object.keys(categoryTotals).reduce((a, b) => categoryTotals[a] > categoryTotals[b] ? a : b);
+            return { avgDaily, totalAnnual, bestMonth, worstMonth, topCategory: topCategory.charAt(0).toUpperCase() + topCategory.slice(1), monthlyTotals };
+        },
+        getGeolocation() {
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        console.log(`Ubicación obtenida: Lat ${lat}, Lon ${lon}`);
+                        app.logic.fetchAirQuality(lat, lon);
+                        app.logic.fetchWeather(lat, lon);
+                    },
+                    (error) => {
+                        console.error("No se pudo obtener la ubicación:", error);
+                        document.getElementById('air-quality-container').classList.add('hidden');
+                        document.getElementById('weather-container').classList.add('hidden');
+                        let errorMessage = "No se pudo obtener la ubicación.";
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED: errorMessage += " Por favor, concede permisos de ubicación."; break;
+                            case error.POSITION_UNAVAILABLE: errorMessage += " La información de ubicación no está disponible."; break;
+                            case error.TIMEOUT: errorMessage += " La solicitud para obtener la ubicación ha expirado."; break;
+                            default: errorMessage += ` Error desconocido: ${error.message || ''}.`;
+                        }
+                        app.ui.showToast(errorMessage, 5000);
+                    }
+                );
+            } else {
+                console.warn("Geolocalización no soportada por el navegador.");
+                document.getElementById('air-quality-container').classList.add('hidden');
+                document.getElementById('weather-container').classList.add('hidden');
+                app.ui.showToast("Tu navegador no soporta la geolocalización.", 5000);
+            }
+        },
+        async fetchAirQuality(lat, lon) {
+            const apiKey = app.state.airVisualApiKey;
+            const url = `https://api.airvisual.com/v2/nearest_city?lat=${lat}&lon=${lon}&key=${apiKey}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) { const errorData = await response.json(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.data.message || 'Unknown error'}`); }
+                const data = await response.json();
+                if (data.status === 'success') {
+                    const cityData = data.data;
+                    app.state.airQualityData = { aqi: cityData.current.pollution.aqius, mainPollutant: cityData.current.pollution.mainus, city: cityData.city };
+                    app.ui.renderAirQuality();
+                } else { console.error("Error al obtener datos de AirVisual:", data.data.message); document.getElementById('air-quality-container').classList.add('hidden'); app.ui.showToast(`Error AirVisual: ${data.data.message}`, 5000); }
+            } catch (error) { console.error("Error en la llamada a la API de AirVisual:", error.message); document.getElementById('air-quality-container').classList.add('hidden'); app.ui.showToast(`Error al conectar con la API de AirVisual: ${error.message}`, 5000); }
+        },
+        async fetchWeather(lat, lon) {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&forecast_days=1&timezone=auto`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) { const errorData = await response.json(); throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.reason || 'Unknown error'}`); }
+                const data = await response.json();
+                if (data.current_weather) {
+                    app.state.weatherData = { temperature: data.current_weather.temperature, weatherCode: data.current_weather.weathercode, windSpeed: data.current_weather.windspeed };
+                    app.ui.renderWeather();
+                } else { console.error("Error al obtener datos de Meteoblue (Open-Meteo):", data); document.getElementById('weather-container').classList.add('hidden'); app.ui.showToast("Error al obtener datos de clima.", 5000); }
+            } catch (error) { console.error("Error en la llamada a la API de Meteoblue (Open-Meteo):", error.message); document.getElementById('weather-container').classList.add('hidden'); app.ui.showToast(`Error al conectar con la API de clima: ${error.message}`, 5000); }
+        }
+    }
+};
+
+app.init();
+</script>
+</body>
+</html>
+
+
